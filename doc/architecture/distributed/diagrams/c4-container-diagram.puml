@@ -1,0 +1,85 @@
+@startuml C4_Container_Distributed_Elsa_Workflows
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+' Uncomment for local rendering
+' !include C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_TOP_DOWN()
+
+title C4 Container Diagram - Elsa Workflows Distributed Architecture
+
+Person(user, "Workflow Developer", "Creates and manages workflows")
+Person(admin, "System Administrator", "Manages and monitors the workflow infrastructure")
+Person_Ext(external_user, "External User", "Triggers workflows via API or events")
+
+System_Boundary(elsa_system, "Elsa Workflows Platform") {
+    Container(api_gateway, "API Gateway", ".NET 9.0, ASP.NET Core", "Provides REST API for workflow management and execution. Entry point for all client requests.")
+    
+    Container(workflow_server, "Workflow Server", ".NET 9.0, Elsa.Server.Web", "Hosts the workflow runtime engine. Processes workflow definitions and executes activities.")
+    
+    Container(workflow_runtime, "Workflow Runtime", ".NET 9.0, Elsa.Workflows.Runtime", "Core workflow execution engine. Manages workflow instances, bookmarks, and state transitions.")
+    
+    Container(scheduler, "Workflow Scheduler", ".NET 9.0, Elsa.Scheduling", "Manages time-based workflow triggers. Handles cron-based and timer activities.")
+    
+    Container(worker_nodes, "Worker Nodes", ".NET 9.0, Distributed Workers", "Horizontal scalable workers that process workflow tasks from queue. Multiple instances for high availability.")
+    
+    Container(studio_web, "Workflow Studio", "Blazor WebAssembly", "Visual workflow designer. Web-based interface for creating and managing workflows.")
+    
+    ContainerDb(postgres_main, "Workflow Database", "PostgreSQL 15+", "Stores workflow definitions, instances, execution logs, bookmarks, and activity state.")
+    
+    ContainerDb(postgres_runtime, "Runtime State Store", "PostgreSQL 15+", "Stores runtime execution state, distributed locks, and coordination data.")
+    
+    ContainerQueue(sqs, "Message Queue", "AWS SQS", "Distributes workflow tasks across worker nodes. Ensures reliable task delivery and retry mechanisms.")
+    
+    Container(cache, "Distributed Cache", "Redis", "Caches workflow definitions, activity metadata, and frequently accessed data.")
+}
+
+System_Ext(external_http, "External HTTP Services", "External APIs and webhooks that workflows interact with")
+System_Ext(smtp, "Email Service", "SMTP Server for sending emails from workflows")
+System_Ext(monitoring, "Monitoring & Logging", "Application Insights / CloudWatch / Datadog")
+
+' User interactions
+Rel(user, studio_web, "Creates and manages workflows", "HTTPS")
+Rel(user, api_gateway, "Manages workflows via API", "HTTPS/REST")
+Rel(admin, api_gateway, "Monitors and administers", "HTTPS/REST")
+Rel(external_user, api_gateway, "Triggers workflows", "HTTPS/REST")
+
+' Studio interactions
+Rel(studio_web, api_gateway, "Reads/writes workflow definitions", "HTTPS/REST/JSON")
+
+' API Gateway interactions
+Rel(api_gateway, workflow_server, "Routes requests", "gRPC/HTTP")
+Rel(api_gateway, postgres_main, "Reads workflow definitions", "SQL/TCP")
+
+' Workflow Server interactions
+Rel(workflow_server, workflow_runtime, "Executes workflows", "In-Process")
+Rel(workflow_server, postgres_main, "Persists workflow state", "SQL/TCP")
+Rel(workflow_server, sqs, "Publishes workflow tasks", "HTTPS/SQS API")
+Rel(workflow_server, cache, "Caches definitions", "Redis Protocol")
+
+' Workflow Runtime interactions
+Rel(workflow_runtime, postgres_runtime, "Manages execution state", "SQL/TCP")
+Rel(workflow_runtime, sqs, "Publishes activity tasks", "HTTPS/SQS API")
+
+' Scheduler interactions
+Rel(scheduler, postgres_main, "Reads scheduled workflows", "SQL/TCP")
+Rel(scheduler, sqs, "Enqueues scheduled tasks", "HTTPS/SQS API")
+Rel(scheduler, postgres_runtime, "Manages distributed locks", "SQL/TCP")
+
+' Worker Nodes interactions
+Rel(worker_nodes, sqs, "Polls for tasks", "HTTPS/Long Polling")
+Rel(worker_nodes, workflow_runtime, "Executes workflow steps", "gRPC/HTTP")
+Rel(worker_nodes, postgres_main, "Updates execution state", "SQL/TCP")
+Rel(worker_nodes, postgres_runtime, "Updates runtime state", "SQL/TCP")
+Rel(worker_nodes, cache, "Reads cached data", "Redis Protocol")
+
+' External integrations
+Rel(workflow_runtime, external_http, "HTTP activities", "HTTPS")
+Rel(workflow_runtime, smtp, "Email activities", "SMTP")
+Rel(workflow_server, monitoring, "Sends telemetry", "HTTPS")
+Rel(worker_nodes, monitoring, "Sends telemetry", "HTTPS")
+
+SHOW_LEGEND()
+
+@enduml
